@@ -33,8 +33,8 @@
 #include <math.h>
 
 /*==================== CONFIGURACIÓN RED / API ====================*/
-const char* WIFI_SSID = "TU_SSID";
-const char* WIFI_PASS = "TU_PASSWORD";
+const char* WIFI_SSID = "LABO";
+const char* WIFI_PASS = "";
 String API_BASE       = "http://192.168.1.100:5000";   // IP del backend
 
 /*============== UMBRALES / CAPACIDAD ==============*/
@@ -112,8 +112,8 @@ float hxOffset[3] = { 0, 0, 0 };  // Offset
 float hxScale [3] = { 1, 1, 1 };  // Escala
 
 // Umbrales clasificación
-float T_DH    = 3.0f; // Δ% Humedad relativa
-float T_DT    = 1.0f; // Δ Temperatura (°C)
+float T_DH    = 1.5f; // Δ% Humedad relativa
+float T_DT    = 0.5f; // Δ Temperatura (°C)
 int   T_MIN_G = 30;   // Peso mínimo para confirmar depósito (gramos)
 
 // Comportamiento después de pesar
