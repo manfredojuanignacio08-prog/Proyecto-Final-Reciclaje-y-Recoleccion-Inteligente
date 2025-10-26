@@ -1,0 +1,9 @@
+{
+  "name": "EcoSmart Dashboard",
+  "short_name": "EcoSmart",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f4f7f6",
+  "theme_color": "#61b46b",
+  "icons": [{ "src": "./logo.png", "type": "image/png", "sizes": "192x192" }]
+}
