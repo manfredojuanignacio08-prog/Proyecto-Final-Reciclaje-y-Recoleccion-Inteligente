@@ -32,13 +32,13 @@
 #include <math.h>
 
 /*==================== RED / API ====================*/
-const char* WIFI_SSID = "LABO";
-const char* WIFI_PASS = "";
-String API_BASE       = "http://172.16.211.113:5000";   // ✅ IP real de tu backend
+const char* WIFI_SSID = "TeleCentro-0cf5-5G";
+const char* WIFI_PASS = "YTZ3GTY5MGNM";
+String API_BASE       = "http://192.168.0.108:5000";
 
 /*============== UMBRALES / CAPACIDAD ==============*/
-const float CAPACITY_KG = 1.0f;   // capacidad por tacho
-uint8_t ALERT_THRESHOLD = 50;     // % alerta visual
+const float CAPACITY_KG = 1.0f;
+uint8_t ALERT_THRESHOLD = 50;
 
 /*===================== PINOUT ======================*/
 // I2C
@@ -46,49 +46,49 @@ const int PIN_SDA = 21;
 const int PIN_SCL = 22;
 
 // Sensores digitales
-const int PIN_IR_OBS  = 26; // IR obstáculo (HIGH = hay objeto)
-const int PIN_IND_MET = 27; // Inductivo CON RELÉ JW2SN-DC12V - LÓGICA CORRECTA
+const int PIN_IR_OBS  = 26;
+const int PIN_IND_MET = 27; // ✅ CONEXIÓN CORREGIDA: COM→GPIO27, NO→3.3V
 
-// NeoPixel (directo al ESP32) -> usar R serie 30–50 Ω en DIN
+// NeoPixel
 const int PIN_NEOPIX  = 23;
-const int NEOPIX_N    = 8;  // cantidad de LEDs
+const int NEOPIX_N    = 8;
 Adafruit_NeoPixel pixels(NEOPIX_N, PIN_NEOPIX, NEO_GRB + NEO_KHZ800);
 
 // Buzzer
 const int PIN_BUZZER  = 14;
 
-// HX711: SCK común + 3 DOUT (GPIO34/35/36 son solo entrada)
+// HX711
 const int PIN_HX_SCK  = 25;
 const int PIN_HX_DT[3]= {34, 35, 36};
 
-// PCA9685 (servo gate en CH0, 50 Hz)
+// PCA9685
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40);
 const int SERVO_CH       = 0;
-const int SERVO_MIN_US   = 500;   // ajustar a tu servo
-const int SERVO_MAX_US   = 2400;  // ajustar a tu servo
-const int SERVO_CLOSED   = 0;     // grados lógicos
-const int SERVO_OPEN     = 60;    // grados lógicos
+const int SERVO_MIN_US   = 500;
+const int SERVO_MAX_US   = 2400;
+const int SERVO_CLOSED   = 0;
+const int SERVO_OPEN     = 60;
 
-// ULN2003 + 28BYJ-48 – orden FULL4WIRE: IN1,IN3,IN2,IN4
+// ULN2003 + 28BYJ-48
 const int PIN_STP_IN1 = 18;
 const int PIN_STP_IN2 = 19;
 const int PIN_STP_IN3 = 5;
 const int PIN_STP_IN4 = 17;
 
-// Endstop X_min (NC recomendado, activo-bajo)
-const int  PIN_ENDSTOP      = 16;   // INPUT_PULLUP; LOW = presionado
-const int  HOME_BOUNCE_MM   = 3;    // alejar para liberar
-const float HOME_FEED_MM_S  = 40.0; // mm/s
-const float HOME_KISS_MM_S  = 20.0; // mm/s
+// Endstop
+const int  PIN_ENDSTOP      = 16;
+const int  HOME_BOUNCE_MM   = 3;
+const float HOME_FEED_MM_S  = 40.0;
+const float HOME_KISS_MM_S  = 20.0;
 
-/*======== Cinemática eje (calibrable / API) ========*/
-float stepsPerMm   = 2.5f;                 // pasos/mm (CALIBRAR)
-float vmax_mm_s    = 120.0f;               // mm/s
-float acc_mm_s2    = 400.0f;               // mm/s^2
-int   pos_mm_bins[3] = { 0, 120, 240 };    // centros Tacho1..3 (mm)
+/*======== Cinemática eje ========*/
+float stepsPerMm   = 2.5f;
+float vmax_mm_s    = 120.0f;
+float acc_mm_s2    = 400.0f;
+int   pos_mm_bins[3] = { 0, 120, 240 };
 
 /*================ OBJETOS / DRIVERS ================*/
-Adafruit_SHT31 sht31 = Adafruit_SHT31();   // T/HR
+Adafruit_SHT31 sht31 = Adafruit_SHT31();
 HX711 HX[3];
 AccelStepper stepper(AccelStepper::FULL4WIRE, PIN_STP_IN1, PIN_STP_IN3, PIN_STP_IN2, PIN_STP_IN4);
 
@@ -96,28 +96,22 @@ AccelStepper stepper(AccelStepper::FULL4WIRE, PIN_STP_IN1, PIN_STP_IN3, PIN_STP_
 enum State { IDLE, ENTRY_SAMPLE, AIM, RELEASE, WEIGHING, RESET };
 State state = IDLE;
 
-// baseline T/HR (EMA) para orgánicos
 float baseT = NAN, baseH = NAN;
-
-// calibración HX711: gramos = (raw - offset) / scale
 float hxOffset[3] = { 250, 0, 717 };
 float hxScale [3] = { 0, 209.663, 839.168 };
-
-// umbrales ΔH/ΔT
-float T_DH    = 3.0f; // Δ%HR
-float T_DT    = 1.0f; // Δ°C
-int   T_MIN_G = 10;   // Δg mínimo para confirmar depósito
-
-// comportamiento tras pesar: volver o no a reposo (tacho 1)
+float T_DH    = 3.0f;
+float T_DT    = 1.0f;
+int   T_MIN_G = 10;
 constexpr bool RETURN_TO_HOME = true;
 
-/*============ Prototipos necesarios ============*/
+/*============ Prototipos ============*/
 void performHoming();
 void axisMoveToMM(float mmTarget);
 void axisApplyKinematics();
-bool isMetalDetected(); // FUNCIÓN PARA RELÉ
+bool isMetalDetected();
+void diagnosticarSensores();
 
-/*================ CLASIFICACIÓN (3 TACHOS) =================*/
+/*================ CLASIFICACIÓN =================*/
 enum Material { MAT_RESTO, MAT_METAL, MAT_ORG };
 
 const char* matName(Material m){
@@ -127,31 +121,38 @@ const char* matName(Material m){
     default:        return "Resto";
   }
 }
+
 int binFor(Material m){
   if(m==MAT_METAL) return 1;
   if(m==MAT_ORG)   return 2;
   return 3;
 }
 
-// ✅ FUNCIÓN CORREGIDA PARA DETECCIÓN CON RELÉ
+// ✅ FUNCIÓN CORREGIDA PARA NUEVA CONEXIÓN DEL RELÉ
 bool isMetalDetected() {
-  // CON RELÉ JW2SN-DC12V EN CONEXIÓN CORRECTA:
-  // - Sensor detecta metal → Relé SE ACTIVA → GPIO27 va a LOW
-  // - No metal → Relé INACTIVO → GPIO27 queda en HIGH (3.3V por COM)
-  bool metalDetected = (digitalRead(PIN_IND_MET) == LOW);
+  // ✅ CONEXIÓN: COM→GPIO27, NO→3.3V
+  // - SIN metal: Relé INACTIVO → GPIO27 = LOW (flotante, sin conexión)
+  // - CON metal: Relé ACTIVADO → GPIO27 = HIGH (3.3V a través de NO)
+  bool metalDetected = (digitalRead(PIN_IND_MET) == HIGH);
   
-  // Debug para verificar funcionamiento
+  // Debug mejorado
   static unsigned long lastDebug = 0;
+  static bool lastState = false;
+  
   if(millis() - lastDebug > 2000) {
     lastDebug = millis();
-    Serial.print("🔍 RELÉ - GPIO27: ");
-    Serial.print(digitalRead(PIN_IND_MET));
-    Serial.print(" -> ");
     
-    if(metalDetected) {
-      Serial.println("METAL (Relé ACTIVADO) ⚡");
-    } else {
-      Serial.println("NO METAL (Relé DESACTIVADO) 🔌");
+    if(metalDetected != lastState) {
+      lastState = metalDetected;
+      Serial.print("🔍 SENSOR METAL - GPIO27: ");
+      Serial.print(digitalRead(PIN_IND_MET));
+      Serial.print(" -> ");
+      
+      if(metalDetected) {
+        Serial.println("✅ METAL DETECTADO (Relé ACTIVADO)");
+      } else {
+        Serial.println("❌ NO METAL (Relé DESACTIVADO)");
+      }
     }
   }
   
@@ -159,22 +160,38 @@ bool isMetalDetected() {
 }
 
 Material classifyOnce(){
-  // 1) Metal por inductivo (LÓGICA CORRECTA CON RELÉ)
-  if(isMetalDetected()) {
-    Serial.println("🔩 METAL detectado - Relé ACTIVADO");
+  // 1) Metal por inductivo - CON FILTRO MEJORADO
+  static unsigned long lastMetalTime = 0;
+  static bool lastMetalState = false;
+  
+  bool currentMetal = isMetalDetected();
+  
+  // Filtro de debounce para evitar falsos positivos
+  if(currentMetal && !lastMetalState) {
+    lastMetalTime = millis();
+  }
+  
+  // Requerir detección consistente por 200ms
+  if(currentMetal && (millis() - lastMetalTime > 200)) {
+    Serial.println("🔩 METAL confirmado - Clasificación final");
+    lastMetalState = true;
     return MAT_METAL;
   }
+  
+  lastMetalState = currentMetal;
 
-  // 2) Orgánico por ΔH/ΔT (respecto a baseline EMA)
+  // 2) Orgánico por ΔH/ΔT (solo si no hay metal)
   float t = sht31.readTemperature();
   float h = sht31.readHumidity();
-  if(isnan(baseT)||isnan(baseH)){ 
-    baseT=t; baseH=h; 
-  }
-  float dT = t - baseT;
-  float dH = h - baseH;
   
-  // Debug de lecturas T/H
+  if(isnan(baseT) || isnan(baseH)){ 
+    baseT = t; 
+    baseH = h; 
+  }
+  
+  float dT = fabs(t - baseT);
+  float dH = fabs(h - baseH);
+  
   static unsigned long lastTDebug = 0;
   if(millis() - lastTDebug > 3000) {
     lastTDebug = millis();
@@ -199,40 +216,67 @@ void setPixels(uint8_t r,uint8_t g,uint8_t b){
   for(int i=0;i<NEOPIX_N;i++) pixels.setPixelColor(i,pixels.Color(r,g,b));
   pixels.show();
 }
-void beep(int ms=80){ digitalWrite(PIN_BUZZER,HIGH); delay(ms); digitalWrite(PIN_BUZZER,LOW); }
 
-/*==================== Servo (PCA9685) ====================*/
+void beep(int ms=80){ 
+  digitalWrite(PIN_BUZZER,HIGH); 
+  delay(ms); 
+  digitalWrite(PIN_BUZZER,LOW); 
+}
+
+/*==================== Servo ====================*/
 uint16_t usToTicks(int us){
-  float tick = (us/20000.0f) * 4096.0f; // 50 Hz
+  float tick = (us/20000.0f) * 4096.0f;
   if(tick<0) tick=0; if(tick>4095) tick=4095;
   return (uint16_t)tick;
 }
+
 void servoWriteDeg(int deg){
   deg = constrain(deg,0,180);
   int us = map(deg, 0,180, SERVO_MIN_US, SERVO_MAX_US);
   pwm.setPWM(SERVO_CH, 0, usToTicks(us));
 }
+
 void gateOpen(){ servoWriteDeg(SERVO_OPEN); }
 void gateClose(){ servoWriteDeg(SERVO_CLOSED); }
 
 /*================== RED / HTTP helpers ==================*/
 bool wifiEnsure(){
-  if(WiFi.status()==WL_CONNECTED) return true;
-  Serial.println("📡 Conectando WiFi...");
+  if(WiFi.status() == WL_CONNECTED) return true;
+  
+  if(WiFi.status() == WL_CONNECTING) {
+    Serial.println("⏳ WiFi conectando, esperando...");
+    unsigned long t0 = millis();
+    while(WiFi.status() == WL_CONNECTING && millis() - t0 < 10000) {
+      delay(500);
+      Serial.print(".");
+    }
+    if(WiFi.status() == WL_CONNECTED) {
+      Serial.println("\n✅ WiFi conectado después de espera");
+      return true;
+    }
+  }
+  
+  Serial.println("📡 Iniciando conexión WiFi...");
+  WiFi.disconnect();
+  delay(1000);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
-  unsigned long t0=millis();
-  while(WiFi.status()!=WL_CONNECTED && millis()-t0<7000) {
-    delay(120);
+  
+  unsigned long t0 = millis();
+  while(WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) {
+    delay(500);
     Serial.print(".");
   }
-  bool connected = (WiFi.status()==WL_CONNECTED);
+  
+  bool connected = (WiFi.status() == WL_CONNECTED);
   if(connected) {
     Serial.println("\n✅ WiFi conectado");
+    Serial.print("📶 IP: "); Serial.println(WiFi.localIP());
   } else {
-    Serial.println("\n❌ WiFi falló");
+    Serial.println("\n❌ WiFi falló después de 15s");
   }
   return connected;
 }
+
 bool httpGetJSON(const String& path, String& out){
   if(!wifiEnsure()) return false;
   HTTPClient http; http.begin(API_BASE + path);
@@ -240,6 +284,7 @@ bool httpGetJSON(const String& path, String& out){
   if(code==200){ out=http.getString(); http.end(); return true; }
   http.end(); return false;
 }
+
 bool httpPostJSON_withRetry(const String& path, const String& json){
   if(!wifiEnsure()) return false;
   HTTPClient http; int tries=0; int code=-1;
@@ -249,15 +294,15 @@ bool httpPostJSON_withRetry(const String& path, const String& json){
     code = http.POST(json);
     http.end();
     if(code==200 || code==201 || code==202) return true;
-    delay( (1<<tries) * 250 ); // 250, 500, 1000 ms
+    delay( (1<<tries) * 250 );
     tries++;
   }
   return false;
 }
-// cola RAM mínima para reintentos diferidos
+
 String pendingEventJSON = "";
 
-/*============ Telemetría del eje / Axis State ============*/
+/*============ Telemetría del eje ============*/
 unsigned long lastAxisReportMs = 0;
 float        lastAxisPosSent   = -9999.0f;
 const char*  lastAxisStateSent = "IDLE";
@@ -275,11 +320,13 @@ void pushAxisState(const char* st, bool homed, float pos_mm){
   http.POST(body);
   http.end();
 }
+
 void reportAxisNow(const char* st){
   lastAxisStateSent = st;
   pushAxisState(st, axisHomed, axisPosMm());
 }
-void reportAxisPeriodic(){  // 1 Hz o si varía > 1 mm
+
+void reportAxisPeriodic(){
   unsigned long now = millis();
   float pos = axisPosMm();
   if ((now - lastAxisReportMs) > 1000UL || fabs(pos - lastAxisPosSent) > 1.0f){
@@ -289,19 +336,17 @@ void reportAxisPeriodic(){  // 1 Hz o si varía > 1 mm
   }
 }
 
-/*============ Poll de comandos Jog/Home desde Dashboard ============*/
+/*============ Poll de comandos Dashboard ============*/
 void pollDashboardCommands() {
     static unsigned long lastPoll = 0;
-    if (millis() - lastPoll < 500) return; // Poll cada 500ms
+    if (millis() - lastPoll < 500) return;
     lastPoll = millis();
 
-    // Verificar si hay comandos pendientes del dashboard
     String payload;
     if (httpGetJSON("/api/axis/pending_commands", payload)) {
         StaticJsonDocument<256> doc;
         if (deserializeJson(doc, payload)) return;
         
-        // Procesar comando de jog
         if (doc.containsKey("jog_mm")) {
             float jogMm = doc["jog_mm"];
             if (jogMm != 0.0f) {
@@ -312,7 +357,6 @@ void pollDashboardCommands() {
             }
         }
         
-        // Procesar comando de home
         if (doc.containsKey("home") && doc["home"] == true) {
             performHoming();
             Serial.println("Comando HOME recibido");
@@ -320,13 +364,13 @@ void pollDashboardCommands() {
     }
 }
 
-/*============ Poll de /api/config sin reiniciar ============*/
+/*============ Poll de configuración ============*/
 unsigned long lastCfgPollMs = 0;
 uint32_t      lastCfgCrc    = 0;
 
 void axisApplyKinematics(){
-  stepper.setMaxSpeed( vmax_mm_s * stepsPerMm );        // pasos/seg
-  stepper.setAcceleration( acc_mm_s2 * stepsPerMm );    // pasos/seg^2
+  stepper.setMaxSpeed( vmax_mm_s * stepsPerMm );
+  stepper.setAcceleration( acc_mm_s2 * stepsPerMm );
 }
 
 void pollConfigIfChanged(){
@@ -336,7 +380,6 @@ void pollConfigIfChanged(){
   String payload;
   if (!httpGetJSON("/api/config", payload)) return;
 
-  // CRC FNV-1a simple
   uint32_t crc = 2166136261u;
   for (size_t i=0;i<payload.length();++i){ crc ^= (uint8_t)payload[i]; crc *= 16777619u; }
   if (crc == lastCfgCrc) return;
@@ -367,7 +410,6 @@ void pollConfigIfChanged(){
     int i=0; for (JsonVariant v : a){ if (i<3) pos_mm_bins[i++] = v.as<int>(); }
   }
   
-  // Nuevos parámetros configurables desde dashboard
   if (j.containsKey("t_dh")) T_DH = j["t_dh"].as<float>();
   if (j.containsKey("t_dt")) T_DT = j["t_dt"].as<float>();
   if (j.containsKey("t_min_g")) T_MIN_G = j["t_min_g"].as<int>();
@@ -389,10 +431,10 @@ long hxReadG(int i, int samples=12){
   return (long)g;
 }
 
-/*================= Eje lineal (Stepper) =================*/
+/*================= Eje lineal =================*/
 inline long  mmToSteps(float mm){ return lround(mm * stepsPerMm); }
 inline float stepsToMm(long st){  return (float)st / stepsPerMm;  }
-inline bool  endstopHit(){ return digitalRead(PIN_ENDSTOP)==LOW; } // NC: LOW = presionado
+inline bool  endstopHit(){ return digitalRead(PIN_ENDSTOP)==LOW; }
 void axisMoveToMM(float mmTarget){ stepper.moveTo( mmToSteps(mmTarget) ); }
 
 void performHoming(){
@@ -404,7 +446,7 @@ void performHoming(){
   // (1) ir hacia X_min rápido hasta presionar
   stepper.setMaxSpeed(HOME_FEED_MM_S * stepsPerMm);
   stepper.setAcceleration((HOME_FEED_MM_S * stepsPerMm) * 2);
-  stepper.moveTo( stepper.currentPosition() - 100000 ); // muy negativo
+  stepper.moveTo( stepper.currentPosition() - 100000 );
   while(!endstopHit()){ stepper.run(); delay(1); }
   stepper.stop(); while(stepper.isRunning()) stepper.run();
 
@@ -425,7 +467,6 @@ void performHoming(){
   stepper.setMaxSpeed(origMax);
   stepper.setAcceleration(origAcc);
 
-  // posicionar sobre Tacho 1
   axisMoveToMM(pos_mm_bins[0]);
   while(stepper.distanceToGo()!=0){ stepper.run(); delay(1); }
 
@@ -433,30 +474,42 @@ void performHoming(){
   reportAxisNow("IDLE");
 }
 
-// ✅ FUNCIÓN DE DIAGNÓSTICO MEJORADA PARA RELÉ
+// ✅ FUNCIÓN DE DIAGNÓSTICO ACTUALIZADA
 void diagnosticarSensores() {
-  Serial.println("\n=== DIAGNÓSTICO CON RELÉ ===");
+  Serial.println("\n=== DIAGNÓSTICO CON NUEVA CONEXIÓN ===");
+  Serial.println("🎯 CONEXIÓN ACTUAL:");
+  Serial.println("   COM → GPIO27");
+  Serial.println("   NO  → 3.3V");
+  Serial.println("   DC+ → 12V");
+  Serial.println("   DC- → GND");
   Serial.println("🎯 Comportamiento ESPERADO:");
-  Serial.println("   - GPIO27 = LOW  → METAL detectado (Relé ACTIVO)");
-  Serial.println("   - GPIO27 = HIGH → NO metal (Relé INACTIVO)");
-  Serial.println("🔍 Probando sensores...");
+  Serial.println("   - GPIO27 = HIGH → METAL detectado (Relé ACTIVADO)");
+  Serial.println("   - GPIO27 = LOW  → NO metal (Relé DESACTIVADO)");
+  Serial.println("🔍 Probando sensores durante 10 segundos...");
   
-  for(int i = 0; i < 6; i++) {
-    Serial.print("Lectura "); Serial.print(i+1); Serial.println(":");
+  unsigned long startTime = millis();
+  int metalCount = 0;
+  int totalReadings = 0;
+  
+  while(millis() - startTime < 10000) {
+    totalReadings++;
     
     int valorGPIO = digitalRead(PIN_IND_MET);
-    bool metal = isMetalDetected();
+    bool metal = (valorGPIO == HIGH);
     
-    Serial.print("  Metal (GPIO27): ");
+    if(metal) metalCount++;
+    
+    Serial.print("Tiempo: "); 
+    Serial.print((millis() - startTime)/1000); 
+    Serial.print("s - ");
+    Serial.print("GPIO27: "); 
     Serial.print(valorGPIO);
     Serial.print(" → ");
     
-    if (valorGPIO == LOW) {
-      Serial.println("LOW  = METAL DETECTADO ✓");
-      Serial.println("        (Relé ACTIVADO - protección funcionando)");
+    if (metal) {
+      Serial.println("METAL DETECTADO ⚡ (Relé ACTIVADO)");
     } else {
-      Serial.println("HIGH = NO METAL ✓"); 
-      Serial.println("        (Relé DESACTIVADO)");
+      Serial.println("NO METAL 🔌 (Relé DESACTIVADO)");
     }
     
     Serial.print("  IR (26): "); 
@@ -464,33 +517,56 @@ void diagnosticarSensores() {
     
     float t = sht31.readTemperature();
     float h = sht31.readHumidity();
-    Serial.print("  Temp: "); Serial.print(t); 
-    Serial.print("°C, Hum: "); Serial.print(h); Serial.println("%");
+    if(!isnan(t) && !isnan(h)) {
+      Serial.print("  Temp: "); Serial.print(t); 
+      Serial.print("°C, Hum: "); Serial.print(h); Serial.println("%");
+    } else {
+      Serial.println("  Error leyendo SHT31");
+    }
     
     Serial.println("---");
-    delay(500);
+    delay(1000);
   }
+  
+  Serial.println("\n📊 RESUMEN DIAGNÓSTICO:");
+  Serial.print("Total lecturas: "); Serial.println(totalReadings);
+  Serial.print("Detecciones METAL: "); Serial.println(metalCount);
+  Serial.print("Porcentaje METAL: "); 
+  Serial.print((metalCount * 100.0) / totalReadings); 
+  Serial.println("%");
   
   Serial.print("Endstop (16): "); 
   Serial.println(digitalRead(PIN_ENDSTOP));
+  
+  // Análisis de resultados
+  if(metalCount == 0) {
+    Serial.println("💡 SUGERENCIA: El sensor siempre muestra NO METAL");
+    Serial.println("   Verificar: Conexión 3.3V a NO, +12V a DC+");
+  } else if(metalCount == totalReadings) {
+    Serial.println("💡 SUGERENCIA: El sensor siempre muestra METAL");
+    Serial.println("   Verificar: Sensor inductivo funcionando correctamente");
+  }
+  
   Serial.println("====================================\n");
 }
 
 /*======================== SETUP ========================*/
 void setup(){
   Serial.begin(115200);
-  Serial.println("🚀 Iniciando EcoSmart con relé...");
+  delay(2000);
+  Serial.println("🚀 Iniciando EcoSmart con NUEVA conexión de relé...");
 
+  // ✅ CONFIGURACIÓN ACTUALIZADA DE PINES
   pinMode(PIN_IR_OBS,  INPUT);
-  pinMode(PIN_IND_MET, INPUT);
-  pinMode(PIN_BUZZER,  OUTPUT); digitalWrite(PIN_BUZZER, LOW);
+  pinMode(PIN_IND_MET, INPUT);  // ✅ SIN PULLUP - depende de conexión física
+  pinMode(PIN_BUZZER,  OUTPUT); 
+  digitalWrite(PIN_BUZZER, LOW);
   pinMode(PIN_ENDSTOP, INPUT_PULLUP);
 
-  // NeoPixel
-  pixels.begin(); setPixels(0,20,0);
+  pixels.begin(); 
+  setPixels(0,20,0);
   Serial.println("✅ NeoPixel inicializado");
 
-  // I2C / SHT31
   Wire.begin(PIN_SDA, PIN_SCL);
   if (!sht31.begin(0x44)) {
     Serial.println("❌ Error: SHT31 no encontrado!");
@@ -498,12 +574,11 @@ void setup(){
     Serial.println("✅ SHT31 inicializado");
   }
 
-  // PCA9685 (servo)
-  pwm.begin(); pwm.setPWMFreq(50);
+  pwm.begin(); 
+  pwm.setPWMFreq(50);
   gateClose();
   Serial.println("✅ Servo inicializado");
 
-  // HX711 (3 canales)
   for(int i=0;i<3;i++){
     HX[i].begin(PIN_HX_DT[i], PIN_HX_SCK);
     HX[i].set_gain(128);
@@ -511,24 +586,21 @@ void setup(){
   }
   Serial.println("✅ HX711 inicializados");
 
-  // Stepper
   axisApplyKinematics();
   Serial.println("✅ Motor paso a paso configurado");
 
-  // WiFi
   WiFi.mode(WIFI_STA);
   wifiEnsure();
 
-  // ✅ DIAGNÓSTICO CON RELÉ
+  // ✅ DIAGNÓSTICO CON NUEVA CONEXIÓN
   diagnosticarSensores();
 
-  // Homing inicial
   Serial.println("🔄 Iniciando homing...");
   performHoming();
   
   setPixels(0,80,20);
   reportAxisNow("IDLE");
-  Serial.println("🎉 Sistema listo con relé - En estado IDLE");
+  Serial.println("🎉 Sistema listo con NUEVA conexión de relé");
 }
 
 /*========================= LOOP =======================*/
@@ -547,7 +619,6 @@ void tryFlushPendingEvent(){
 }
 
 void loop(){
-  // mantener todo vivo
   pumpMotion();
   reportAxisPeriodic();
   pollDashboardCommands();
@@ -556,7 +627,6 @@ void loop(){
   switch(state){
 
     case IDLE: {
-      // baseline T/HR (EMA) en reposo
       float t = sht31.readTemperature();
       float h = sht31.readHumidity();
       if(!isnan(t)&&!isnan(h)){
@@ -577,7 +647,6 @@ void loop(){
     } break;
 
     case ENTRY_SAMPLE: {
-      // ~500 ms de muestreo (prioridad: Metal > Orgánico > Resto)
       if(millis()-tWinStart < 500){
         Material m = classifyOnce();
         if(m==MAT_METAL) lastMat = MAT_METAL;
@@ -602,7 +671,7 @@ void loop(){
     case RELEASE: {
       reportAxisNow("RELEASING");
       gateOpen();  delay(250);  gateClose();
-      g0 = hxReadG(targetBin-1, 15);  // base del tacho elegido
+      g0 = hxReadG(targetBin-1, 15);
       state = WEIGHING;
       lastAxisStateSent = "WEIGHING";
     } break;
@@ -610,7 +679,7 @@ void loop(){
     case WEIGHING: {
       static unsigned long t0 = 0;
       if(t0==0){ t0=millis(); }
-      if(millis()-t0 < 300) break;    // asentamiento corto
+      if(millis()-t0 < 300) break;
       t0=0;
 
       long g1 = hxReadG(targetBin-1, 15);
@@ -619,7 +688,6 @@ void loop(){
       float percent = (float)g1/(CAPACITY_KG*1000.0f)*100.0f;
       int ipct = (int)percent;
 
-      // ✅ JSON CORREGIDO: usar "delta_g" para coincidir con tu backend
       String json = String("{\"bin\":")+targetBin+
                     ",\"material\":\""+String(matName(lastMat))+"\","+
                     "\"delta_g\":"+dg+","+
