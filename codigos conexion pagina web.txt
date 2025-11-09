@@ -1,0 +1,19 @@
+cd api
+pip install -r requirements.txt
+python app.py
+
+Abre esta URL en tu navegador:
+http://localhost:5000/api/bins
+http://localhost:5000/api/deposits/history
+
+
+# En la carpeta del dashboard
+python -m http.server 8000
+
+
+#NAVEGADOR
+http://localhost:8000
+
+
+# En la carpeta de la presentacion
+python -m http.server 8080
